@@ -1,34 +1,36 @@
--- EXECUTOR-PROOF GUI (COREGUI METHOD)
+--==============================
+-- DELAY BEFORE ANYTHING LOADS
+--==============================
+task.wait(2)
 
-local CoreGui = game:GetService("CoreGui")
+--==============================
+-- EXECUTOR-SAFE SETUP
+--==============================
 local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 
--- pick the correct UI parent
-local uiParent =
-    (gethui and gethui())
-    or CoreGui
+local uiParent = (gethui and gethui()) or CoreGui
 
--- protect gui if executor supports it
 local function protect(gui)
-    if syn and syn.protect_gui then
-        syn.protect_gui(gui)
-    end
+	if syn and syn.protect_gui then
+		syn.protect_gui(gui)
+	end
 end
 
---------------------------------------------------
+--==============================
 -- LOADING SCREEN
---------------------------------------------------
+--==============================
 local LOAD_TIME = 15
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "LoadingBaddies"
-gui.IgnoreGuiInset = true
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-protect(gui)
-gui.Parent = uiParent
+local loadingGui = Instance.new("ScreenGui")
+loadingGui.Name = "LoadingBaddies"
+loadingGui.IgnoreGuiInset = true
+loadingGui.ResetOnSpawn = false
+loadingGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+protect(loadingGui)
+loadingGui.Parent = uiParent
 
-local bg = Instance.new("Frame", gui)
+local bg = Instance.new("Frame", loadingGui)
 bg.Size = UDim2.fromScale(1,1)
 bg.BackgroundColor3 = Color3.fromRGB(25,10,40)
 
@@ -76,34 +78,34 @@ barFill.BackgroundColor3 = Color3.fromRGB(255,220,90)
 Instance.new("UICorner", barFill).CornerRadius = UDim.new(1,0)
 
 task.spawn(function()
-    local dots = 0
-    while gui.Parent do
-        dots = (dots + 1) % 4
-        loadingText.Text = "Loading Baddies" .. string.rep(".", dots)
-        task.wait(0.5)
-    end
+	local dots = 0
+	while loadingGui.Parent do
+		dots = (dots + 1) % 4
+		loadingText.Text = "Loading Baddies" .. string.rep(".", dots)
+		task.wait(0.5)
+	end
 end)
 
 TweenService:Create(
-    barFill,
-    TweenInfo.new(LOAD_TIME, Enum.EasingStyle.Linear),
-    {Size = UDim2.new(1,0,1,0)}
+	barFill,
+	TweenInfo.new(LOAD_TIME, Enum.EasingStyle.Linear),
+	{Size = UDim2.new(1,0,1,0)}
 ):Play()
 
 task.wait(LOAD_TIME)
-gui:Destroy()
+loadingGui:Destroy()
 
---------------------------------------------------
+--==============================
 -- WEAPON SPAWNER UI
---------------------------------------------------
-local spawner = Instance.new("ScreenGui")
-spawner.Name = "WeaponSpawnerUI"
-spawner.IgnoreGuiInset = true
-spawner.ZIndexBehavior = Enum.ZIndexBehavior.Global
-protect(spawner)
-spawner.Parent = uiParent
+--==============================
+local spawnerGui = Instance.new("ScreenGui")
+spawnerGui.Name = "WeaponSpawnerUI"
+spawnerGui.IgnoreGuiInset = true
+spawnerGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+protect(spawnerGui)
+spawnerGui.Parent = uiParent
 
-local frame = Instance.new("Frame", spawner)
+local frame = Instance.new("Frame", spawnerGui)
 frame.Size = UDim2.fromScale(0.4,0.35)
 frame.Position = UDim2.fromScale(0.5,0.5)
 frame.AnchorPoint = Vector2.new(0.5,0.5)
@@ -137,7 +139,7 @@ button.BackgroundColor3 = Color3.fromRGB(120,80,255)
 Instance.new("UICorner", button).CornerRadius = UDim.new(0,14)
 
 button.MouseButton1Click:Connect(function()
-    button.Text = "Waiting..."
-    task.wait(10)
-    button.Text = "Done"
+	button.Text = "Waiting..."
+	task.wait(10)
+	button.Text = "Done"
 end)
