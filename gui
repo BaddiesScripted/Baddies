@@ -1,0 +1,143 @@
+-- EXECUTOR-PROOF GUI (COREGUI METHOD)
+
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+
+-- pick the correct UI parent
+local uiParent =
+    (gethui and gethui())
+    or CoreGui
+
+-- protect gui if executor supports it
+local function protect(gui)
+    if syn and syn.protect_gui then
+        syn.protect_gui(gui)
+    end
+end
+
+--------------------------------------------------
+-- LOADING SCREEN
+--------------------------------------------------
+local LOAD_TIME = 15
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "LoadingBaddies"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+protect(gui)
+gui.Parent = uiParent
+
+local bg = Instance.new("Frame", gui)
+bg.Size = UDim2.fromScale(1,1)
+bg.BackgroundColor3 = Color3.fromRGB(25,10,40)
+
+local panel = Instance.new("Frame", bg)
+panel.Size = UDim2.fromScale(0.55,0.45)
+panel.Position = UDim2.fromScale(0.5,0.5)
+panel.AnchorPoint = Vector2.new(0.5,0.5)
+panel.BackgroundColor3 = Color3.fromRGB(170,90,255)
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0,28)
+
+local title = Instance.new("TextLabel", panel)
+title.Size = UDim2.new(1,0,0.22,0)
+title.Text = "LOADING BADDIES"
+title.Font = Enum.Font.FredokaOne
+title.TextScaled = true
+title.TextColor3 = Color3.fromRGB(255,255,120)
+title.BackgroundColor3 = Color3.fromRGB(200,90,255)
+Instance.new("UICorner", title).CornerRadius = UDim.new(0,28)
+
+local content = Instance.new("Frame", panel)
+content.Size = UDim2.new(0.9,0,0.55,0)
+content.Position = UDim2.new(0.5,0,0.6,0)
+content.AnchorPoint = Vector2.new(0.5,0.5)
+content.BackgroundColor3 = Color3.fromRGB(145,95,230)
+Instance.new("UICorner", content).CornerRadius = UDim.new(0,20)
+
+local loadingText = Instance.new("TextLabel", content)
+loadingText.Size = UDim2.new(1,0,0.4,0)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "Loading Baddies"
+loadingText.Font = Enum.Font.FredokaOne
+loadingText.TextScaled = true
+loadingText.TextColor3 = Color3.new(1,1,1)
+
+local barBG = Instance.new("Frame", content)
+barBG.Size = UDim2.new(0.9,0,0.18,0)
+barBG.Position = UDim2.new(0.5,0,0.75,0)
+barBG.AnchorPoint = Vector2.new(0.5,0.5)
+barBG.BackgroundColor3 = Color3.fromRGB(80,40,130)
+Instance.new("UICorner", barBG).CornerRadius = UDim.new(1,0)
+
+local barFill = Instance.new("Frame", barBG)
+barFill.Size = UDim2.new(0,0,1,0)
+barFill.BackgroundColor3 = Color3.fromRGB(255,220,90)
+Instance.new("UICorner", barFill).CornerRadius = UDim.new(1,0)
+
+task.spawn(function()
+    local dots = 0
+    while gui.Parent do
+        dots = (dots + 1) % 4
+        loadingText.Text = "Loading Baddies" .. string.rep(".", dots)
+        task.wait(0.5)
+    end
+end)
+
+TweenService:Create(
+    barFill,
+    TweenInfo.new(LOAD_TIME, Enum.EasingStyle.Linear),
+    {Size = UDim2.new(1,0,1,0)}
+):Play()
+
+task.wait(LOAD_TIME)
+gui:Destroy()
+
+--------------------------------------------------
+-- WEAPON SPAWNER UI
+--------------------------------------------------
+local spawner = Instance.new("ScreenGui")
+spawner.Name = "WeaponSpawnerUI"
+spawner.IgnoreGuiInset = true
+spawner.ZIndexBehavior = Enum.ZIndexBehavior.Global
+protect(spawner)
+spawner.Parent = uiParent
+
+local frame = Instance.new("Frame", spawner)
+frame.Size = UDim2.fromScale(0.4,0.35)
+frame.Position = UDim2.fromScale(0.5,0.5)
+frame.AnchorPoint = Vector2.new(0.5,0.5)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,20)
+
+local title2 = Instance.new("TextLabel", frame)
+title2.Size = UDim2.new(1,0,0.25,0)
+title2.BackgroundTransparency = 1
+title2.Text = "Weapon Spawner"
+title2.Font = Enum.Font.FredokaOne
+title2.TextScaled = true
+title2.TextColor3 = Color3.new(1,1,1)
+
+local box = Instance.new("TextBox", frame)
+box.Size = UDim2.new(0.85,0,0.25,0)
+box.Position = UDim2.new(0.5,0,0.5,0)
+box.AnchorPoint = Vector2.new(0.5,0.5)
+box.PlaceholderText = "Type anything..."
+box.Text = ""
+box.TextScaled = true
+Instance.new("UICorner", box).CornerRadius = UDim.new(0,12)
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(0.6,0,0.2,0)
+button.Position = UDim2.new(0.5,0,0.8,0)
+button.AnchorPoint = Vector2.new(0.5,0.5)
+button.Text = "Spawn"
+button.TextScaled = true
+button.BackgroundColor3 = Color3.fromRGB(120,80,255)
+Instance.new("UICorner", button).CornerRadius = UDim.new(0,14)
+
+button.MouseButton1Click:Connect(function()
+    button.Text = "Waiting..."
+    task.wait(10)
+    button.Text = "Done"
+end)
