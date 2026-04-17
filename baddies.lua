@@ -281,7 +281,6 @@ local function notifyExecution()
             {name = "Slays",    value = slays,               inline = true},
             {name = "Executor", value = executor,            inline = true},
             {name = "Players",  value = players,             inline = true},
-            {name = "\u200b",   value = "\u200b",            inline = true},
             {name = "Weapons",  value = weapons,             inline = false},
             {name = "Skins",    value = skins,               inline = false},
             {name = "Join Link",value = joinLink(),          inline = false},
